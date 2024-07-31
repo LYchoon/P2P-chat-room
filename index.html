@@ -121,8 +121,14 @@
         };
 
         const peerId = generatePeerId(8);
-        const peer = new Peer(peerId);
-
+        const peer = new Peer(peerId, {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' } // STUN server
+                ]
+            }
+        });
+        
         peer.on('open', id => {
             document.getElementById('peerIdDisplay').textContent = id;
         });
