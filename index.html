@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Chat Room</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 90%;
+        }
+        h1 {
+            text-align: center;
+        }
+        #chatPage {
+            display: flex;
+            flex-direction: column;
+        }
+        #content {
+            display: flex;
+            justify-content: space-between;
+        }
+        #chat {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            height: 60vh;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: scroll;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        #videos {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin-left: 10px;
+        }
+        video {
+            width: 100%;
+            max-height: 30vh;
+            margin-top: 10px;
+            border: 1px solid #ccc;
+        }
+        #messageInput {
+            display: flex;
+        }
+        #messageInput input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        #messageInput button {
+            padding: 10px;
+        }
+        #enterPage, #chatPage {
+            display: none;
+        }
+        #chatPage.active, #enterPage.active {
+            display: block;
+        }
+        #callControls {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="enterPage" class="active">
+            <h1>Enter Chat Room</h1>
+            <div>
+                <label for="usernameInput">Enter Your Name:</label>
+                <input type="text" id="usernameInput">
+                <button id="enterButton">Enter</button>
+            </div>
+        </div>
+        <div id="chatPage">
+            <h1>P2P Chat Room</h1>
+            <div>
+                <label for="peerIdInput">Enter Peer ID:</label>
+                <input type="text" id="peerIdInput">
+                <button id="connectButton">Connect</button>
+            </div>
+            <div>
+                <strong>Your Peer ID:</strong> <span id="peerIdDisplay">Generating...</span>
+            </div>
+            <div id="content">
+                <div id="chat"></div>
+                <div id="videos">
+                    <video id="localVideo" autoplay muted></video>
+                    <video id="remoteVideo" autoplay></video>
+                </div>
+            </div>
+            <div id="messageInput">
+                <input type="text" id="message" placeholder="Type your message here...">
+                <button id="sendButton">Send</button>
+            </div>
+            <div id="callControls">
+                <button id="voiceCallButton">Voice Call</button>
+                <button id="videoCallButton">Video Call</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.3.1/dist/peerjs.min.js"></script>
+    <script>
+        let username;
+        const peer = new Peer();
+
+        peer.on('open', id => {
+            document.getElementById('peerIdDisplay').textContent = id;
+        });
+
+        let conn;
+        let call;
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+
+        document.getElementById('enterButton').addEventListener('click', () => {
+            username = document.getElementById('usernameInput').value;
+            if (username) {
+                document.getElementById('enterPage').classList.remove('active');
+                document.getElementById('chatPage').classList.add('active');
+            } else {
+                alert('Please enter your name');
+            }
+        });
+
+        document.getElementById('connectButton').addEventListener('click', () => {
+            const peerId = document.getElementById('peerIdInput').value;
+            conn = peer.connect(peerId);
+
+            conn.on('open', () => {
+                alert('Connected to: ' + peerId);
+                setupConnectionHandlers();
+            });
+        });
+
+        document.getElementById('sendButton').addEventListener('click', () => {
+            const message = document.getElementById('message').value;
+            displayMessage(username, message);
+            conn.send({sender: username, text: message});
+            document.getElementById('message').value = '';
+        });
+
+        document.getElementById('message').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                const message = document.getElementById('message').value;
+                displayMessage(username, message);
+                conn.send({sender: username, text: message});
+                document.getElementById('message').value = '';
+            }
+        });
+
+        peer.on('connection', connection => {
+            conn = connection;
+            conn.on('open', () => {
+                alert('Connected!');
+                setupConnectionHandlers();
+            });
+        });
+
+        function setupConnectionHandlers() {
+            conn.on('data', data => {
+                displayMessage(data.sender, data.text);
+            });
+
+            conn.on('close', () => {
+                alert('Connection closed');
+            });
+        }
+
+        function displayMessage(sender, message) {
+            const chat = document.getElementById('chat');
+            const messageElement = document.createElement('div');
+            messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+            chat.appendChild(messageElement);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        document.getElementById('voiceCallButton').addEventListener('click', () => {
+            startCall(false);
+        });
+
+        document.getElementById('videoCallButton').addEventListener('click', () => {
+            startCall(true);
+        });
+
+        function startCall(isVideo) {
+            const peerId = document.getElementById('peerIdInput').value;
+            navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true })
+                .then(stream => {
+                    localVideo.srcObject = stream;
+                    call = peer.call(peerId, stream);
+
+                    call.on('stream', remoteStream => {
+                        remoteVideo.srcObject = remoteStream;
+                    });
+
+                    call.on('close', () => {
+                        alert('Call ended');
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to get local stream', err);
+                });
+        }
+
+        peer.on('call', incomingCall => {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    localVideo.srcObject = stream;
+                    incomingCall.answer(stream);
+
+                    incomingCall.on('stream', remoteStream => {
+                        remoteVideo.srcObject = remoteStream;
+                    });
+
+                    incomingCall.on('close', () => {
+                        alert('Call ended');
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to get local stream', err);
+                });
+        });
+    </script>
+</body>
+</html>
